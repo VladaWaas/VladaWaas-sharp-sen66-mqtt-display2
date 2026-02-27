@@ -30,6 +30,11 @@ A custom 3D-printable enclosure for this project is available on Printables:
 - Online/offline status with Last Will and Testament
 - Bidirectional control — send messages to the display from HA
 - Built-in web UI (tabs: **Aktuální data** + **Konfigurace**) on port 80
+<<<<<<< ours
+- Optional TMEP.cz HTTP upload with tokenized query parameters
+=======
+- TMEP.cz integration with real-time request URL preview and manual request button in web UI
+>>>>>>> theirs
 - MQTT publish protection: invalid startup values are filtered + warmup delay before first publish
 
 ## Hardware
@@ -96,9 +101,25 @@ After connecting the device to WiFi, open: `http://<device-ip>/`
    - WiFi: SSID + password
    - MQTT: server, port, username, password
    - Display: rotation (0-3, výchozí **2**), invert request
-   - Intervals: display refresh, MQTT publish, MQTT warmup delay
+   - TMEP.cz: base URL, live preview of real request URL, manual request trigger
+   - Intervals: display refresh, MQTT publish, **TMEP request interval**, MQTT warmup delay
 
 > Konfigurace se ukládá perzistentně do NVS (zůstane po restartu). Po uložení z webu se zařízení automaticky restartuje.
+
+
+## TMEP.cz Upload
+
+The device can optionally send every measured sample to TMEP.cz via HTTP GET.
+
+Web config fields:
+- **Doména pro zasílání hodnot**: e.g. `xxk4sk-g6rxfh`
+- **Parametry požadavku**: e.g. `tempV=*TEMP*&humV=*HUM*&rssi=*RSSI*`
+
+Supported placeholders:
+- Sensor values: `*TEMP*`, `*HUM*`, `*PM1*`, `*PM2*` (PM2.5), `*PM4*`, `*PM10*`, `*VOC*`, `*NOX*`, `*CO2*`
+- System values: `*RSSI*`, `*UPTIME*`, `*FREEHEAP*`, `*IP*`
+
+Configuration is persisted in NVS together with the rest of the settings.
 
 ## MQTT Startup Data Protection
 
