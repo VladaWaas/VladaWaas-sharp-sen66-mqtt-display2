@@ -23,6 +23,7 @@
 #include <SensirionI2cSen66.h>
 #include <ArduinoJson.h>
 #include "config.h"
+#include "WifiProvisioning.h"
 
 // =============================================
 //  KONFIGURACE - UPRAVTE PODLE POTŘEBY
@@ -81,6 +82,7 @@ SensirionI2cSen66 sen66;
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
 WebServer webServer(80);
+WifiProvisioning wifiProvisioning;
 
 // =============================================
 //  DATA SENZORU
@@ -588,7 +590,51 @@ bool sendTmepRequest(const bool manualTrigger) {
 }
 
 void handleWebRoot() {
-  const char* html = R"HTML(<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SEN66 panel</title><style>body{font-family:Arial,sans-serif;margin:0;background:#f3f5f7;color:#222}header{background:#0f172a;color:#fff;padding:12px 16px}main{padding:16px;max-width:980px;margin:0 auto}.tabs{display:flex;gap:8px;margin-bottom:12px}.tab{padding:10px 14px;border:0;border-radius:8px;background:#dbe2ea;cursor:pointer}.tab.active{background:#2563eb;color:#fff}.panel{display:none;background:#fff;padding:16px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.15)}.panel.active{display:block}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}.card{border:1px solid #e5e7eb;border-radius:8px;padding:10px}label{display:block;font-size:.9rem;margin-top:8px}input{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px}button.save,button.secondary{margin-top:12px;padding:10px 14px;color:#fff;border:0;border-radius:8px;cursor:pointer}button.save{background:#16a34a}button.secondary{background:#2563eb}.muted{color:#666;font-size:.85rem}.ok{color:#166534}.err{color:#b91c1c}code.url{display:block;padding:8px;background:#f1f5f9;border-radius:6px;word-break:break-all}</style></head><body><header><h2>SEN66 MQTT displej</h2></header><main><div class="tabs"><button class="tab active" data-tab="data">Aktuální data</button><button class="tab" data-tab="cfg">Konfigurace</button></div><section id="data" class="panel active"><div class="grid" id="cards"></div><p class="muted" id="status"></p></section><section id="cfg" class="panel"><form id="cfgForm"><h3>WiFi</h3><label>SSID<input name="wifiSsid" required></label><label>Heslo<input type="password" name="wifiPassword"></label><h3>MQTT</h3><label>Server<input name="mqttServer" required></label><label>Port<input type="number" min="1" max="65535" name="mqttPort" required></label><label>Uživatel<input name="mqttUser"></label><label>Heslo<input type="password" name="mqttPassword"></label><h3>TMEP.cz</h3><label>Doména pro zasílání hodnot<input name="tmepDomain" placeholder="xxk4sk-g6rxfh"></label><label>Parametry požadavku<input name="tmepParams" placeholder="tempV=*TEMP*&humV=*HUM*&co2=*CO2*"></label><p class="muted">Použitelné proměnné: *TEMP*, *HUM*, *PM1*, *PM2*, *PM4*, *PM10*, *VOC*, *NOX*, *CO2*.</p><p class="muted">Reálné URL volané na TMEP.cz:</p><code id="tmepUrl" class="url muted">Není dostupné</code><button id="tmepSendBtn" class="secondary" type="button">Odeslat TMEP request ručně</button><p id="tmepMsg" class="muted"></p><h3>Displej</h3><label>Rotace (0-3)<input type="number" min="0" max="3" name="displayRotation" required></label><label>Inverze (0/1)<input type="number" min="0" max="1" name="displayInvertRequested" required></label><h3>Intervaly (ms)</h3><label>Překreslení displeje<input type="number" min="500" name="displayRefreshInterval" required></label><label>MQTT publish<input type="number" min="1000" name="mqttPublishInterval" required></label><label>TMEP request interval<input type="number" min="1000" name="tmepRequestInterval" required></label><label>MQTT warmup delay<input type="number" min="1000" name="mqttWarmupDelay" required></label><label>Temperature offset<input type="number" step="0.1" name="temperatureOffset" required></label><p class="muted">hodnota, kterou přičíst k naměřené teplotě</p><button class="save" type="submit">Uložit konfiguraci</button><p id="cfgMsg" class="muted"></p></form></section></main><script>const tabs=document.querySelectorAll('.tab');tabs.forEach(t=>t.onclick=()=>{tabs.forEach(x=>x.classList.remove('active'));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));t.classList.add('active');document.getElementById(t.dataset.tab).classList.add('active')});async function loadData(){const r=await fetch('/api/data');const d=await r.json();const cards=document.getElementById('cards');cards.innerHTML='';for(const [k,v] of Object.entries(d.values)){const c=document.createElement('div');c.className='card';c.innerHTML=`<strong>${k}</strong><div>${v}</div>`;cards.appendChild(c)}document.getElementById('status').textContent=`WiFi: ${d.wifi} | TMEP: ${d.tmepStatus} | MQTT: ${d.mqtt} | validní data: ${d.valid} | uptime: ${d.uptime}s`;const tmepUrlEl=document.getElementById('tmepUrl');tmepUrlEl.textContent=d.tmepUrl||'Není dostupné';tmepUrlEl.className=d.tmepUrl?'url':'url muted'}async function loadCfg(){const r=await fetch('/api/config');const c=await r.json();const f=document.getElementById('cfgForm');Object.keys(c).forEach(k=>{if(f[k])f[k].value=c[k]})}document.getElementById('cfgForm').onsubmit=async(e)=>{e.preventDefault();const f=e.target;const payload=Object.fromEntries(new FormData(f).entries());const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const txt=await r.text();const m=document.getElementById('cfgMsg');m.textContent=txt;m.className=r.ok?'ok':'err'};document.getElementById('tmepSendBtn').onclick=async()=>{const r=await fetch('/api/tmep/send',{method:'POST'});const txt=await r.text();const m=document.getElementById('tmepMsg');m.textContent=txt;m.className=r.ok?'ok':'err';await loadData()};loadData();loadCfg();setInterval(loadData,2000);</script></body></html>)HTML";
+  const char* html = R"HTML(
+<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SEN66 panel</title>
+<style>
+body{font-family:Arial,sans-serif;margin:0;background:#f3f5f7;color:#222}header{background:#0f172a;color:#fff;padding:12px 16px}main{padding:16px;max-width:980px;margin:0 auto}
+.tabs{display:flex;gap:8px;margin-bottom:12px}.tab{padding:10px 14px;border:0;border-radius:8px;background:#dbe2ea;cursor:pointer}.tab.active{background:#2563eb;color:#fff}
+.panel{display:none;background:#fff;padding:16px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.15)}.panel.active{display:block}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}.card{border:1px solid #e5e7eb;border-radius:8px;padding:10px}
+label{display:block;font-size:.9rem;margin-top:8px}input{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px}
+button.save,button.secondary,button.warn{margin-top:12px;padding:10px 14px;color:#fff;border:0;border-radius:8px;cursor:pointer}
+button.save{background:#16a34a}button.secondary{background:#2563eb}button.warn{background:#b91c1c}
+.muted{color:#666;font-size:.85rem}.ok{color:#166534}.err{color:#b91c1c}code.url{display:block;padding:8px;background:#f1f5f9;border-radius:6px;word-break:break-all}
+</style></head><body><header><h2>SEN66 MQTT displej</h2></header><main>
+<div class="tabs"><button class="tab active" data-tab="data">Aktuální data</button><button class="tab" data-tab="cfg">Konfigurace</button></div>
+<section id="data" class="panel active"><div class="grid" id="cards"></div><p class="muted" id="status"></p></section>
+<section id="cfg" class="panel"><form id="cfgForm"><h3>Wi-Fi setup</h3>
+<p class="muted" id="wifiMode"></p><p class="muted" id="wifiConn"></p>
+<label>SSID<input name="wifiSsid" required></label>
+<label>Heslo<input type="password" name="wifiPassword" id="wifiPass"></label>
+<label><input id="showPass" type="checkbox" style="width:auto"> Zobrazit heslo</label>
+<button id="wifiOnlySaveBtn" class="secondary" type="button">Uložit jen Wi-Fi a připojit</button>
+<button id="wifiForgetBtn" class="warn" type="button">Zapomenout Wi-Fi</button><p class="muted" id="wifiMsg"></p>
+<h3>MQTT</h3><label>Server<input name="mqttServer" required></label><label>Port<input type="number" min="1" max="65535" name="mqttPort" required></label><label>Uživatel<input name="mqttUser"></label><label>Heslo<input type="password" name="mqttPassword"></label>
+<h3>TMEP.cz</h3><label>Doména pro zasílání hodnot<input name="tmepDomain" placeholder="xxk4sk-g6rxfh"></label><label>Parametry požadavku<input name="tmepParams" placeholder="tempV=*TEMP*&humV=*HUM*&co2=*CO2*"></label>
+<p class="muted">Použitelné proměnné: *TEMP*, *HUM*, *PM1*, *PM2*, *PM4*, *PM10*, *VOC*, *NOX*, *CO2*.</p><p class="muted">Reálné URL volané na TMEP.cz:</p><code id="tmepUrl" class="url muted">Není dostupné</code>
+<button id="tmepSendBtn" class="secondary" type="button">Odeslat TMEP request ručně</button><p id="tmepMsg" class="muted"></p>
+<h3>Displej</h3><label>Rotace (0-3)<input type="number" min="0" max="3" name="displayRotation" required></label><label>Inverze (0/1)<input type="number" min="0" max="1" name="displayInvertRequested" required></label>
+<h3>Intervaly (ms)</h3><label>Překreslení displeje<input type="number" min="500" name="displayRefreshInterval" required></label><label>MQTT publish<input type="number" min="1000" name="mqttPublishInterval" required></label><label>TMEP request interval<input type="number" min="1000" name="tmepRequestInterval" required></label><label>MQTT warmup delay<input type="number" min="1000" name="mqttWarmupDelay" required></label><label>Temperature offset<input type="number" step="0.1" name="temperatureOffset" required></label><p class="muted">hodnota, kterou přičíst k naměřené teplotě</p>
+<button class="save" type="submit">Uložit plnou konfiguraci</button><p id="cfgMsg" class="muted"></p></form></section></main>
+<script>
+const tabs=document.querySelectorAll('.tab');tabs.forEach(t=>t.onclick=()=>{tabs.forEach(x=>x.classList.remove('active'));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));t.classList.add('active');document.getElementById(t.dataset.tab).classList.add('active')});
+function setMsg(id,text,ok){const m=document.getElementById(id);m.textContent=text;m.className=ok?'ok':'err'}
+async function loadData(){const r=await fetch('/api/data');const d=await r.json();const cards=document.getElementById('cards');cards.innerHTML='';for(const [k,v] of Object.entries(d.values)){const c=document.createElement('div');c.className='card';c.innerHTML=`<strong>${k}</strong><div>${v}</div>`;cards.appendChild(c)}
+document.getElementById('status').textContent=`WiFi: ${d.wifi} | režim: ${d.wifiMode} | TMEP: ${d.tmepStatus} | MQTT: ${d.mqtt} | validní data: ${d.valid} | uptime: ${d.uptime}s`;
+document.getElementById('wifiMode').textContent=`Režim: ${d.wifiMode} ${d.apSsid?('| AP: '+d.apSsid+' @ '+d.apIp):''}`;
+document.getElementById('wifiConn').textContent=`Aktuální SSID: ${d.currentSsid||'-'} | IP: ${d.currentIp||'-'} | RSSI: ${d.rssi||'-'} dBm`;
+const tmepUrlEl=document.getElementById('tmepUrl');tmepUrlEl.textContent=d.tmepUrl||'Není dostupné';tmepUrlEl.className=d.tmepUrl?'url':'url muted'}
+async function loadCfg(){const r=await fetch('/api/config');const c=await r.json();const f=document.getElementById('cfgForm');Object.keys(c).forEach(k=>{if(f[k])f[k].value=c[k]})}
+
+document.getElementById('showPass').onchange=(e)=>{document.getElementById('wifiPass').type=e.target.checked?'text':'password'};
+document.getElementById('cfgForm').onsubmit=async(e)=>{e.preventDefault();const f=e.target;const payload=Object.fromEntries(new FormData(f).entries());const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});setMsg('cfgMsg',await r.text(),r.ok)};
+document.getElementById('wifiOnlySaveBtn').onclick=async()=>{const f=document.getElementById('cfgForm');const payload={wifiSsid:f.wifiSsid.value,wifiPassword:f.wifiPassword.value};const r=await fetch('/api/wifi/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();setMsg('wifiMsg',d.message||'?',r.ok);await loadData()};
+document.getElementById('wifiForgetBtn').onclick=async()=>{const r=await fetch('/api/wifi/forget',{method:'POST'});const d=await r.json();setMsg('wifiMsg',d.message||'?',r.ok);};
+document.getElementById('tmepSendBtn').onclick=async()=>{const r=await fetch('/api/tmep/send',{method:'POST'});setMsg('tmepMsg',await r.text(),r.ok);await loadData()};
+loadData();loadCfg();setInterval(loadData,2000);
+</script></body></html>)HTML";
   webServer.send(200, "text/html; charset=utf-8", html);
 }
 
@@ -600,6 +646,12 @@ void handleApiData() {
   doc["uptime"] = millis() / 1000;
   doc["tmepUrl"] = buildTmepRequestUrl();
   doc["tmepStatus"] = lastTmepStatus;
+  doc["wifiMode"] = wifiProvisioning.getStateText();
+  doc["apSsid"] = wifiProvisioning.isCaptiveMode() ? wifiProvisioning.getApSsid() : "";
+  doc["apIp"] = wifiProvisioning.isCaptiveMode() ? wifiProvisioning.getApIp() : "";
+  doc["currentSsid"] = WiFi.status() == WL_CONNECTED ? WiFi.SSID() : "";
+  doc["currentIp"] = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "";
+  doc["rssi"] = WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0;
 
   JsonObject values = doc["values"].to<JsonObject>();
   values["temperature"] = round(sensorData.temperature * 10) / 10.0;
@@ -687,6 +739,50 @@ void handleApiConfigPost() {
   ESP.restart();
 }
 
+void handleApiWifiSave() {
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, webServer.arg("plain"));
+  if (err) {
+    webServer.send(400, "application/json", "{\"ok\":false,\"message\":\"Neplatny JSON\"}");
+    return;
+  }
+
+  String ssid = doc["wifiSsid"].as<String>();
+  String password = doc["wifiPassword"].as<String>();
+
+  String message;
+  bool ok = wifiProvisioning.saveCredentialsAndConnect(ssid, password, message);
+
+  JsonDocument out;
+  out["ok"] = ok;
+  out["message"] = message;
+  out["wifiMode"] = wifiProvisioning.getStateText();
+  String payload;
+  serializeJson(out, payload);
+  webServer.send(ok ? 200 : 400, "application/json", payload);
+
+  if (ok) {
+    delay(300);
+    ESP.restart();
+  }
+}
+
+void handleApiWifiForget() {
+  bool ok = wifiProvisioning.forgetCredentials();
+
+  JsonDocument out;
+  out["ok"] = ok;
+  out["message"] = ok ? "Wi-Fi zapomenuta, restartuji do captive AP" : "Nepodarilo se zapomenout Wi-Fi";
+  String payload;
+  serializeJson(out, payload);
+  webServer.send(ok ? 200 : 500, "application/json", payload);
+
+  if (ok) {
+    delay(300);
+    ESP.restart();
+  }
+}
+
 void handleApiTmepSend() {
   bool ok = sendTmepRequest(true);
   if (ok) {
@@ -696,12 +792,38 @@ void handleApiTmepSend() {
   webServer.send(500, "text/plain", "TMEP request se nepodarilo odeslat (zkontrolujte URL, WiFi a data)");
 }
 
+void handleCaptiveRedirect() {
+  if (!wifiProvisioning.isCaptiveMode()) {
+    webServer.send(404, "text/plain", "Not found");
+    return;
+  }
+  webServer.sendHeader("Location", String("http://") + wifiProvisioning.getApIp() + "/", true);
+  webServer.send(302, "text/plain", "Redirecting to captive portal");
+}
+
 void setupWebServer() {
   webServer.on("/", HTTP_GET, handleWebRoot);
   webServer.on("/api/data", HTTP_GET, handleApiData);
   webServer.on("/api/config", HTTP_GET, handleApiConfigGet);
   webServer.on("/api/config", HTTP_POST, handleApiConfigPost);
+  webServer.on("/api/wifi/save", HTTP_POST, handleApiWifiSave);
+  webServer.on("/api/wifi/forget", HTTP_POST, handleApiWifiForget);
   webServer.on("/api/tmep/send", HTTP_POST, handleApiTmepSend);
+
+  webServer.on("/generate_204", HTTP_ANY, handleCaptiveRedirect);
+  webServer.on("/hotspot-detect.html", HTTP_ANY, handleCaptiveRedirect);
+  webServer.on("/connecttest.txt", HTTP_ANY, handleCaptiveRedirect);
+  webServer.on("/ncsi.txt", HTTP_ANY, handleCaptiveRedirect);
+  webServer.on("/redirect", HTTP_ANY, handleCaptiveRedirect);
+
+  webServer.onNotFound([]() {
+    if (wifiProvisioning.isCaptiveMode()) {
+      handleCaptiveRedirect();
+      return;
+    }
+    webServer.send(404, "text/plain", "Not found");
+  });
+
   webServer.begin();
   Serial.println("WEB: Server bezi na portu 80");
 }
@@ -963,29 +1085,6 @@ bool reconnectMQTT() {
 }
 
 // =============================================
-//  WiFi
-// =============================================
-
-void setupWiFi() {
-  Serial.printf("WiFi: Pripojuji k %s", appConfig.wifiSsid.c_str());
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(appConfig.wifiSsid.c_str(), appConfig.wifiPassword.c_str());
-  
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("\nWiFi: OK! IP: %s\n", WiFi.localIP().toString().c_str());
-  } else {
-    Serial.println("\nWiFi: CHYBA! Pokracuji bez WiFi...");
-  }
-}
-
-// =============================================
 //  SETUP
 // =============================================
 
@@ -1012,17 +1111,19 @@ void setup() {
   drawSplashScreen();
   Serial.println("Display: OK!");
   
-  // 2. WiFi
-  setupWiFi();
+  // 2. WiFi provisioning (STA/AP captive)
+  wifiProvisioning.begin(&appConfig, 20000UL);
   
   // 3. MQTT
   mqtt.setServer(appConfig.mqttServer.c_str(), appConfig.mqttPort);
   mqtt.setCallback(mqttCallback);
   mqtt.setBufferSize(1024); // Větší buffer pro HA Discovery JSON
   
-  if (WiFi.status() == WL_CONNECTED) {
+  if (wifiProvisioning.getState() == WIFI_STA_CONNECTED) {
     reconnectMQTT();
   }
+
+  setupWebServer();
   
   // 4. SEN66
   initSEN66();
@@ -1039,45 +1140,29 @@ void setup() {
 
 void loop() {
   unsigned long now = millis();
-  
-  // --- WiFi reconnect ---
-  static bool webServerStarted = false;
-  if (WiFi.status() != WL_CONNECTED) {
-    webServerStarted = false;
-    static unsigned long lastWifiRetry = 0;
-    if (now - lastWifiRetry > 30000) {
-      lastWifiRetry = now;
-      Serial.println("WiFi: Reconnecting...");
-      WiFi.reconnect();
-    }
-  } else if (!webServerStarted) {
-    setupWebServer();
-    webServerStarted = true;
-  }
-  
+
+  wifiProvisioning.process();
+  webServer.handleClient();
+
   // --- MQTT reconnect ---
-  if (WiFi.status() == WL_CONNECTED && !mqtt.connected()) {
+  if (wifiProvisioning.getState() == WIFI_STA_CONNECTED && !mqtt.connected()) {
     if (now - lastMqttReconnect > MQTT_RECONNECT_INTERVAL) {
       lastMqttReconnect = now;
       reconnectMQTT();
     }
   }
-  
+
   // --- MQTT loop ---
   if (mqtt.connected()) {
     mqtt.loop();
   }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    webServer.handleClient();
-  }
-  
   // --- Čtení SEN66 ---
   if (now - lastSensorRead > SENSOR_READ_INTERVAL) {
     lastSensorRead = now;
     readSEN66();
   }
-  
+
   // --- Publikování do MQTT ---
   if (now - lastMqttPublish > appConfig.mqttPublishInterval) {
     lastMqttPublish = now;
@@ -1089,13 +1174,13 @@ void loop() {
     lastTmepRequest = now;
     sendTmepRequest(false);
   }
-  
+
   // --- Override timeout (vrátit se na senzorový dashboard) ---
   if (displayOverride && now > displayOverrideUntil) {
     displayOverride = false;
     Serial.println("Display: Override expired, zpet na dashboard");
   }
-  
+
   // --- Refresh displeje ---
   if (now - lastDisplayRefresh > appConfig.displayRefreshInterval) {
     lastDisplayRefresh = now;
@@ -1103,6 +1188,7 @@ void loop() {
       drawSensorScreen();
     }
   }
-  
+
   delay(10);
 }
+

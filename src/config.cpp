@@ -18,7 +18,6 @@ void sanitize(AppConfig& cfg) {
 }  // namespace
 
 bool validateConfig(const AppConfig& cfg) {
-  if (cfg.wifiSsid.length() == 0) return false;
   if (cfg.mqttServer.length() == 0) return false;
   if (cfg.mqttPort < 1 || cfg.mqttPort > 65535) return false;
   if (cfg.displayRotation > 3) return false;

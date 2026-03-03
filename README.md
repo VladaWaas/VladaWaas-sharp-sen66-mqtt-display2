@@ -87,6 +87,25 @@ GPIO8           I2C SCL         SEN66
    - Press `Ctrl+Shift+P` → type `PlatformIO: Serial Monitor`
 
 
+
+## Initial setup / Captive portal
+
+Firmware nově podporuje provisioning přes **AP + captive portal**:
+
+1. Po bootu se načte uložené Wi-Fi z NVS.
+2. Pokud SSID chybí, nebo se STA nepřipojí do ~20 s, zařízení přepne do AP režimu.
+3. AP má název `SharpDisplay-<MAC>` (poslední 3 byty MAC), výchozí režim je **open AP** (bez hesla).
+4. DNS server odpovídá na všechny domény IP adresou AP (`192.168.4.1`) a HTTP požadavky jsou přesměrovány na `/`.
+5. V portálu běží stejná web UI stránka jako v normálním režimu, rozšířená o sekci **Wi-Fi setup**:
+   - uložit SSID + heslo (`/api/wifi/save`)
+   - zapomenout Wi-Fi (`/api/wifi/forget`)
+6. Po uložení Wi-Fi se zařízení pokusí o STA připojení a následně se restartuje.
+
+Režimy Wi-Fi v firmware:
+- `WIFI_STA_CONNECTING`
+- `WIFI_STA_CONNECTED`
+- `WIFI_AP_CAPTIVE`
+
 ## Web Interface
 
 After connecting the device to WiFi, open: `http://<device-ip>/`
