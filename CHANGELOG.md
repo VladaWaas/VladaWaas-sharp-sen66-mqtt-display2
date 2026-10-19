@@ -2,6 +2,28 @@
 
 Formát vychází z [Keep a Changelog](https://keepachangelog.com/cs/1.1.0/).
 
+## [Unreleased]
+
+### Změněno
+
+- Teplota, vlhkost a CO₂ mají přednost: velké číslice U8g2 Logisoso s výškou
+  34 px ve třech horních polích. Na výšku má CO₂ vlastní velké pole pod teplotou
+  a vlhkostí. PM, VOC a NOx zůstávají ve spodní části; zvýraznění CO₂, jednotky,
+  desetinná místa a původní hranice hodnocení zůstávají zachovány.
+- Fyzický displej: nové rozložení s fonty U8g2 v nativních velikostech,
+  českou diakritikou, symboly jednotek a desetinnou čárkou. Prachové hodnoty
+  mají jedno desetinné místo, VOC a NOx při náběhu pomlčku. CO₂ od 2 000 ppm
+  zvýrazní inverzní pole s doporučením vyvětrat. Rozložení podporuje i otočení
+  na výšku a softwarovou inverzi; startovací a OTA obrazovky používají stejné fonty.
+- Hostitelské testy skutečného vykreslování U8g2 ověřují diakritiku, mezní hodnoty,
+  hranice hodnocení, inverzi, náběh a chyby senzoru včetně generování náhledů.
+- Webový přehled „Aktuální data“: responzivní karty s českými názvy, jednotkami,
+  desetinnou čárkou a barevným i slovním hodnocením CO₂, PM2,5, PM10, VOC a NOₓ.
+  Rozbalovací legenda vysvětluje orientační hranice a bezrozměrné plynové indexy.
+- Přehledné stavy Wi-Fi, MQTT a TMEP, čas posledního spojení a čitelná doba běhu.
+  Neplatné a nedostupné hodnoty se nezobrazují jako aktuální; webové požadavky mají
+  timeout a při přerušeném spojení se obnovování automaticky opakuje.
+
 ## [2.2.1] - 2026-10-19
 
 Verze 2.2.0 nebyla samostatně vydána, toto vydání obsahuje i všechny její změny - viz

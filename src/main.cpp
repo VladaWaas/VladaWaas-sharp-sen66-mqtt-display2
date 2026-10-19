@@ -27,6 +27,7 @@
 #include <limits>
 #include "config.h"
 #include "WifiProvisioning.h"
+#include "DisplayDashboard.h"
 
 #define FW_VERSION "2.2.1"
 
@@ -177,48 +178,6 @@ void applyDisplaySettings() {
                 appConfig.displayInvertRequested ? "ano (SW)" : "ne");
 }
 
-void drawCenteredText(const char* text, int y, int textSize) {
-  display.setTextSize(textSize);
-  int16_t x1, y1;
-  uint16_t w, h;
-  display.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
-  display.setCursor((DISPLAY_WIDTH - (int)w) / 2, y);
-  display.print(text);
-}
-
-void drawRightAlignedText(const char* text, int y, int textSize) {
-  display.setTextSize(textSize);
-  int16_t x1, y1;
-  uint16_t w, h;
-  display.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
-  display.setCursor(DISPLAY_WIDTH - (int)w - 5, y);
-  display.print(text);
-}
-
-void drawDividerLine(int y) {
-  display.drawLine(5, y, DISPLAY_WIDTH - 5, y, inkColor());
-}
-
-// Ikona teplomeru
-void drawThermIcon(int x, int y) {
-  display.drawCircle(x + 3, y + 12, 4, inkColor());
-  display.drawRect(x + 1, y, 5, 12, inkColor());
-  display.fillCircle(x + 3, y + 12, 3, inkColor());
-}
-
-// Ikona kapky (vlhkost)
-void drawDropIcon(int x, int y) {
-  const uint16_t c = inkColor();
-  display.drawPixel(x + 3, y, c);
-  display.drawLine(x + 2, y + 1, x + 4, y + 1, c);
-  display.drawLine(x + 1, y + 2, x + 5, y + 2, c);
-  display.drawLine(x, y + 3, x + 6, y + 3, c);
-  display.drawLine(x, y + 4, x + 6, y + 4, c);
-  display.drawLine(x, y + 5, x + 6, y + 5, c);
-  display.drawLine(x + 1, y + 6, x + 5, y + 6, c);
-  display.drawLine(x + 2, y + 7, x + 4, y + 7, c);
-}
-
 // =============================================
 //  VALIDACE DAT SENZORU
 // =============================================
@@ -254,168 +213,23 @@ bool co2LooksValid(uint16_t co2) {
 
 // Hodnoceni kvality vzduchu podle PM2.5
 const char* getAirQuality(float pm25) {
-  if (pm25 < 12.0)  return "VYNIKAJICI";
-  if (pm25 < 35.4)  return "DOBRE";
-  if (pm25 < 55.4)  return "PRIJATELNE";
-  if (pm25 < 150.4) return "SPATNE";
-  if (pm25 < 250.4) return "VELMI SPATNE";
-  return "NEBEZPECNE";
+  static const char* const labels[] = {"VYNIKAJICI", "DOBRE", "PRIJATELNE", "SPATNE", "VELMI SPATNE", "NEBEZPECNE"};
+  return labels[dashboard::airQualityBand(pm25)];
 }
 
 void drawSensorScreen() {
-  clearCanvas();
-
-  char buf[64];
-
-  // === STATUS BAR ===
-  display.setTextSize(1);
-
-  if (WiFi.status() == WL_CONNECTED) {
-    snprintf(buf, sizeof(buf), "WiFi:%s", WiFi.localIP().toString().c_str());
-  } else if (wifiProvisioning.isCaptiveMode()) {
-    snprintf(buf, sizeof(buf), "AP:%s", wifiProvisioning.getApIp().c_str());
-  } else {
-    snprintf(buf, sizeof(buf), "WiFi:---");
-  }
-  display.setCursor(5, 5);
-  display.print(buf);
-
-  display.setCursor(165, 5);
-  display.print(lastTmepStatus);
-
-  display.setCursor(240, 5);
-  display.print(mqtt.connected() ? "MQTT:OK" : "MQTT:---");
-
-  display.setCursor(315, 5);
-  display.print(sen66Ready ? "SEN66:OK" : "SEN66:---");
-
-  unsigned long uptimeSec = millis() / 1000;
-  unsigned long hrs = uptimeSec / 3600;
-  unsigned long mins = (uptimeSec % 3600) / 60;
-  snprintf(buf, sizeof(buf), "%luh%02lum", hrs, mins);
-  drawRightAlignedText(buf, 5, 1);
-
-  drawDividerLine(18);
-
-  if (!sensorData.valid) {
-    drawCenteredText("Cekam na data", 80, 2);
-    drawCenteredText("ze senzoru SEN66...", 110, 2);
-    display.refresh();
-    return;
-  }
-
-  // === TEPLOTA & VLHKOST ===
-  drawThermIcon(15, 28);
-  snprintf(buf, sizeof(buf), "%.1f", sensorData.temperature);
-  display.setTextSize(4);
-  display.setCursor(35, 25);
-  display.print(buf);
-
-  int16_t x1, y1;
-  uint16_t w, h;
-  display.getTextBounds(buf, 35, 25, &x1, &y1, &w, &h);
-  display.setTextSize(2);
-  display.setCursor(35 + w + 5, 25);
-  display.print("o");
-  display.setCursor(35 + w + 5, 40);
-  display.print("C");
-
-  drawDropIcon(220, 28);
-  snprintf(buf, sizeof(buf), "%.1f", sensorData.humidity);
-  display.setTextSize(4);
-  display.setCursor(240, 25);
-  display.print(buf);
-  display.getTextBounds(buf, 240, 25, &x1, &y1, &w, &h);
-  display.setTextSize(2);
-  display.setCursor(240 + w + 5, 30);
-  display.print("%");
-
-  drawDividerLine(68);
-
-  // === PM HODNOTY ===
-  display.setTextSize(1);
-  display.setCursor(15, 74);
-  display.print("PM1.0");
-  display.setCursor(115, 74);
-  display.print("PM2.5");
-  display.setCursor(215, 74);
-  display.print("PM4.0");
-  display.setCursor(315, 74);
-  display.print("PM10");
-
-  display.setTextSize(3);
-  snprintf(buf, sizeof(buf), "%.0f", sensorData.pm1);
-  display.setCursor(10, 90);
-  display.print(buf);
-
-  snprintf(buf, sizeof(buf), "%.0f", sensorData.pm25);
-  display.setCursor(110, 90);
-  display.print(buf);
-
-  snprintf(buf, sizeof(buf), "%.0f", sensorData.pm4);
-  display.setCursor(210, 90);
-  display.print(buf);
-
-  snprintf(buf, sizeof(buf), "%.0f", sensorData.pm10);
-  display.setCursor(310, 90);
-  display.print(buf);
-
-  display.setTextSize(1);
-  static const int pmUnitX[4] = {15, 115, 215, 315};
-  for (uint8_t i = 0; i < 4; i++) {
-    display.setCursor(pmUnitX[i], 118);
-    display.print("ug/m3");
-  }
-
-  drawDividerLine(132);
-
-  // === VOC, NOx, CO2 ===
-  display.setTextSize(1);
-  display.setCursor(15, 138);
-  display.print("VOC Index");
-  display.setCursor(155, 138);
-  display.print("NOx Index");
-  display.setCursor(295, 138);
-  display.print("CO2");
-
-  display.setTextSize(3);
-  snprintf(buf, sizeof(buf), "%.0f", sensorData.voc);
-  display.setCursor(15, 152);
-  display.print(buf);
-
-  snprintf(buf, sizeof(buf), "%.0f", sensorData.nox);
-  display.setCursor(155, 152);
-  display.print(buf);
-
-  if (sensorData.co2Valid) {
-    snprintf(buf, sizeof(buf), "%u", sensorData.co2);
-  } else {
-    snprintf(buf, sizeof(buf), "---");
-  }
-  display.setCursor(280, 152);
-  display.print(buf);
-
-  display.setTextSize(1);
-  display.setCursor(350, 170);
-  display.print("ppm");
-
-  drawDividerLine(185);
-
-  // === AIR QUALITY BAR ===
-  const char* quality = getAirQuality(sensorData.pm25);
-  display.setTextSize(1);
-  display.setCursor(15, 192);
-  display.print("Kvalita vzduchu:");
-
-  display.setTextSize(3);
-  display.setCursor(15, 208);
-  display.print(quality);
-
-  float barValue = min(sensorData.pm25 / 150.0f, 1.0f);
-  int barWidth = (int)(barValue * 120);
-  display.drawRect(270, 200, 122, 24, inkColor());
-  if (barWidth > 0) display.fillRect(271, 201, barWidth, 22, inkColor());
-
+  String wifiStatus;
+  if (WiFi.status() == WL_CONNECTED) wifiStatus = "Wi-Fi " + WiFi.localIP().toString();
+  else if (wifiProvisioning.isCaptiveMode()) wifiStatus = "AP " + wifiProvisioning.getApIp();
+  else wifiStatus = "Wi-Fi !";
+  const dashboard::Data data = {
+    sensorData.temperature, sensorData.humidity,
+    {sensorData.pm1, sensorData.pm25, sensorData.pm4, sensorData.pm10},
+    sensorData.voc, sensorData.nox, sensorData.co2,
+    sensorData.valid, sensorData.co2Valid, sen66Ready, sensorStale, mqtt.connected(),
+    wifiStatus.c_str(), lastTmepStatus.c_str(), millis() / 1000
+  };
+  dashboard::draw(display, data, inkColor(), appConfig.displayInvertRequested ? BLACK : WHITE);
   display.refresh();
 }
 
@@ -428,29 +242,12 @@ void drawCustomTextScreen() {
 }
 
 void drawSplashScreen() {
-  clearCanvas();
-
-  drawCenteredText("Sharp LCD + SEN66", 40, 3);
-  drawCenteredText("MQTT Dashboard", 80, 2);
-
-  drawDividerLine(110);
-
-  display.setTextSize(1);
-  display.setCursor(30, 125);
-  display.print("FW:   ");
-  display.print(FW_VERSION);
-
-  display.setCursor(30, 140);
-  display.print("WiFi: ");
-  display.print(appConfig.wifiSsid.length() ? appConfig.wifiSsid : String("(nenastaveno)"));
-
-  display.setCursor(30, 155);
-  display.print("MQTT: ");
-  display.print(appConfig.mqttServer.length() ? appConfig.mqttServer : String("(nenastaveno)"));
-
-  display.setCursor(30, 175);
-  display.print("Inicializace...");
-
+  const String firmware = "FW: " + String(FW_VERSION);
+  const String wifi = "Wi-Fi: " + (appConfig.wifiSsid.length() ? appConfig.wifiSsid : String("(nenastaveno)"));
+  const String broker = "MQTT: " + (appConfig.mqttServer.length() ? appConfig.mqttServer : String("(nenastaveno)"));
+  const char* lines[] = {firmware.c_str(), wifi.c_str(), broker.c_str(), "Inicializace..."};
+  dashboard::message(display, "Sharp LCD + SEN66", lines, 4, inkColor(),
+                     appConfig.displayInvertRequested ? BLACK : WHITE);
   display.refresh();
 }
 
@@ -699,18 +496,32 @@ void handleWebRoot() {
   const char* html = R"HTML(
 <!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SEN66 panel</title>
 <style>
-body{font-family:Arial,sans-serif;margin:0;background:#f3f5f7;color:#222}header{background:#0f172a;color:#fff;padding:12px 16px}main{padding:16px;max-width:980px;margin:0 auto}
-.tabs{display:flex;gap:8px;margin-bottom:12px}.tab{padding:10px 14px;border:0;border-radius:8px;background:#dbe2ea;cursor:pointer}.tab.active{background:#2563eb;color:#fff}
-.panel{display:none;background:#fff;padding:16px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.15)}.panel.active{display:block}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}.card{border:1px solid #e5e7eb;border-radius:8px;padding:10px}
+*{box-sizing:border-box}body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;margin:0;background:#f1f5f9;color:#17243b;line-height:1.5}header{background:#0f172a;color:#fff;padding:22px max(20px,calc((100% - 1080px)/2))}header h2{margin:0;font-size:22px;letter-spacing:-.5px}header p{margin:4px 0 0;color:#a8b9d0;font-size:13px}main{padding:24px 20px;max-width:1120px;margin:0 auto}
+.tabs{display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap}.tab{font:inherit;font-size:14px;font-weight:600;padding:11px 18px;border:1px solid transparent;border-radius:10px;background:#e2e8f0;color:#475569;cursor:pointer}.tab.active{background:#2563eb;color:#fff;box-shadow:0 3px 8px #2563eb26}.tab:hover{filter:brightness(.96)}button:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid #2563eb;outline-offset:3px}
+.panel{display:none;background:#fff;padding:24px;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 4px 20px #0f172a06}.panel.active{display:block}
+.data-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:22px}.data-heading h1{font-size:23px;letter-spacing:-.6px;margin:0}.data-heading p{margin:3px 0 0}.live{font-size:12px;color:#475569;background:#f1f5f9;border-radius:20px;padding:6px 12px;white-space:nowrap}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card{--tone:#64748b;--wash:#f8fafc;--edge:#e2e8f0;min-width:0;border:1px solid var(--edge);border-top:3px solid var(--tone);border-radius:12px;padding:17px 18px;background:var(--wash)}
+.card.good{--tone:#166534;--wash:#f0fdf4;--edge:#bbdfc5}.card.watch{--tone:#854d0e;--wash:#fffbeb;--edge:#f1d690}.card.high{--tone:#9a3412;--wash:#fff7ed;--edge:#fdcba0}.card.bad{--tone:#991b1b;--wash:#fef2f2;--edge:#fecaca}
+.card-label{margin:0;font-size:14px;font-weight:650}.card-description{font-size:12px;color:#526175;margin:3px 0 12px}.reading{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}.value{font-size:36px;line-height:1.2;letter-spacing:-1px;font-weight:650;font-variant-numeric:tabular-nums}.unit{font-size:14px;color:#526175}.assessment{display:inline-block;margin-top:13px;font-size:12px;font-weight:600;color:var(--tone)}.assessment:before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--tone);margin-right:6px}
+.device-status{display:flex;gap:8px;flex-wrap:wrap;padding-top:18px;margin-top:22px;border-top:1px solid #e2e8f0}.status-item{font-size:12px;background:#f1f5f9;border-radius:7px;padding:6px 10px;overflow-wrap:anywhere}.status-item.ok{background:#f0fdf4}.status-item.err{background:#fef2f2}.device-meta{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:12px}.legend{margin-top:20px;border-top:1px solid #e2e8f0;padding-top:16px;font-size:12px;color:#526175}.legend summary{cursor:pointer;font-weight:600}.legend p{margin:10px 0 0}.legend a{color:#1d4ed8}
+@media(max-width:700px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.panel{padding:18px}.data-heading{align-items:flex-start;flex-direction:column}.value{font-size:30px}}@media(max-width:380px){main{padding:16px 10px}.panel{padding:14px}.grid{grid-template-columns:1fr}.tab{padding:10px 12px}}
 label{display:block;font-size:14px;margin-top:8px}input{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box}
 button.save,button.secondary,button.warn{margin-top:12px;padding:10px 14px;color:#fff;border:0;border-radius:8px;cursor:pointer}
 button.save{background:#16a34a}button.secondary{background:#2563eb}button.warn{background:#b91c1c}
 label.chk{display:flex;align-items:center;gap:6px}label.chk input{width:auto}progress{width:100%;height:18px;margin-top:10px}
 .muted{color:#666;font-size:13px}.ok{color:#166534}.err{color:#b91c1c}code.url{display:block;padding:8px;background:#f1f5f9;border-radius:6px;word-break:break-all;font-size:13px}
-</style></head><body><header><h2>SEN66 MQTT displej</h2></header><main>
+</style></head><body><header><h2>SEN66 <span style="font-weight:400;color:#a8b9d0">/ monitor vzduchu</span></h2><p>Teplota, vlhkost a kvalita vzduchu v místnosti</p></header><main>
 <div class="tabs"><button class="tab active" data-tab="data">Aktuální data</button><button class="tab" data-tab="cfg">Konfigurace</button><button class="tab" data-tab="fw">Aktualizace</button></div>
-<section id="data" class="panel active"><div class="grid" id="cards"></div><p class="muted" id="status"></p></section>
+<section id="data" class="panel active" aria-labelledby="dataTitle">
+<div class="data-heading"><div><h1 id="dataTitle">Aktuální měření</h1><p class="muted">Aktuální hodnoty ze senzoru SEN66</p></div><span id="dataState" class="live" role="status">Načítám měření…</span></div>
+<div class="grid" id="cards"></div><div class="device-status" id="status"></div>
+<div class="device-meta muted"><span id="updated">Čekám na první data</span><span id="deviceMeta"></span></div>
+<details class="legend"><summary>Jak číst hodnoty a barvy</summary>
+<p>Barvy jsou orientační pomůcka pro aktuální měření, nikoli zdravotní limity nebo výpočet AQI z denních průměrů. Zelená značí nízkou hodnotu, žlutá zvýšenou, oranžová vysokou a červená velmi vysokou. Šedá značí nehodnocenou nebo nedostupnou hodnotu.</p>
+<p>CO₂: pod 1 000 ppm nízká hodnota, 1 000–1 999 ppm doporučení vyvětrat, od 2 000 ppm výrazné doporučení vyvětrat. <a href="https://www.umweltbundesamt.de/en/node/83460" target="_blank" rel="noopener noreferrer">Podklad pro CO₂</a>.</p>
+<p>Prachové částice: PM2,5 má barevné hranice 12 / 35,4 / 55,4 µg/m³, PM10 má hranice 54 / 154 / 254 µg/m³. Jde o orientační stupnici tohoto rozhraní. PM1 a PM4 zobrazujeme bez hodnocení, protože pro ně nepoužíváme samostatnou stupnici.</p>
+<p>VOC a NOₓ jsou bezrozměrné indexy 1–500, nikoli koncentrace v ppm či µg/m³. VOC má běžnou úroveň kolem 100, NOₓ kolem 1. Barevné hranice rozhraní: VOC 150 / 250 / 350, NOₓ 20 / 50 / 100. Nula znamená, že index ještě není připraven. <a href="https://sensirion.com/media/documents/02232963/6294E043/Info_Note_VOC_Index.pdf" target="_blank" rel="noopener noreferrer">VOC index</a> · <a href="https://sensirion.com/media/documents/9F289B95/6294DFFC/Info_Note_NOx_Index.pdf" target="_blank" rel="noopener noreferrer">NOₓ index</a>.</p>
+</details></section>
 <section id="cfg" class="panel"><form id="cfgForm"><h3>Wi-Fi</h3>
 <p class="muted" id="wifiMode"></p><p class="muted" id="wifiConn"></p>
 <label>SSID<input name="wifiSsid" required></label>
@@ -739,12 +550,46 @@ const NUM=['mqttPort','displayRotation','displayInvertRequested','displayRefresh
 const tabs=document.querySelectorAll('.tab');tabs.forEach(t=>t.onclick=()=>{tabs.forEach(x=>x.classList.remove('active'));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));t.classList.add('active');document.getElementById(t.dataset.tab).classList.add('active')});
 function setMsg(id,text,ok){const m=document.getElementById(id);m.textContent=text;m.className=ok?'ok':'err'}
 let otaBusy=false;
-async function loadData(){if(otaBusy)return;try{const r=await fetch('/api/data');const d=await r.json();const cards=document.getElementById('cards');cards.innerHTML='';for(const [k,v] of Object.entries(d.values)){const c=document.createElement('div');c.className='card';const t=document.createElement('strong');t.textContent=k;const val=document.createElement('div');val.textContent=v;c.appendChild(t);c.appendChild(val);cards.appendChild(c)}
+// UI thresholds are indicative instantaneous bands, not health limits or AQI.
+const METRICS=[
+{key:'co2',label:'Oxid uhličitý · CO₂',description:'Ukazatel větrání místnosti',unit:'ppm',digits:0,bands:[1000,2000],labels:['Nízká hodnota','Doporučujeme vyvětrat','Vyvětrejte místnost']},
+{key:'temperature',label:'Teplota',description:'Teplota vzduchu',unit:'°C',digits:1},
+{key:'humidity',label:'Relativní vlhkost',description:'Vlhkost vzduchu',unit:'%',digits:1},
+{key:'pm25',label:'Prachové částice · PM2,5',description:'Částice do velikosti 2,5 µm',unit:'µg/m³',digits:1,bands:[12,35.4,55.4]},
+{key:'pm10',label:'Prachové částice · PM10',description:'Částice do velikosti 10 µm',unit:'µg/m³',digits:1,bands:[54,154,254]},
+{key:'voc',label:'Těkavé organické látky · VOC',description:'Relativní index vůči běžné úrovni',unit:'index',digits:0,bands:[150,250,350]},
+{key:'pm1',label:'Prachové částice · PM1',description:'Částice do velikosti 1 µm',unit:'µg/m³',digits:1},
+{key:'pm4',label:'Prachové částice · PM4',description:'Částice do velikosti 4 µm',unit:'µg/m³',digits:1},
+{key:'nox',label:'Oxidy dusíku · NOₓ',description:'Relativní index vůči běžné úrovni',unit:'index',digits:0,bands:[20,50,100]}
+];
+const cardNodes=METRICS.map(m=>{const card=document.createElement('article');card.className='card';
+const label=document.createElement('h2');label.className='card-label';label.textContent=m.label;
+const description=document.createElement('p');description.className='card-description';description.textContent=m.description;
+const reading=document.createElement('div');reading.className='reading';const value=document.createElement('span');value.className='value';value.textContent='—';
+const unit=document.createElement('span');unit.className='unit';unit.textContent=m.unit;reading.append(value,unit);
+const assessment=document.createElement('span');assessment.className='assessment';assessment.textContent='Čekám na data';
+card.append(label,description,reading,assessment);document.getElementById('cards').appendChild(card);return {card,value,assessment}});
+function classify(m,v){if(!m.bands)return {tone:'',text:m.key.startsWith('pm')?'Bez barevného hodnocení':'Aktuální měření'};
+const index=m.bands.filter(limit=>v>=limit).length;
+return {tone:(m.bands.length===2?['good','watch','bad']:['good','watch','high','bad'])[index],text:(m.labels||['Nízká hodnota','Zvýšená hodnota','Vysoká hodnota','Velmi vysoká hodnota'])[index]}}
+function renderReadings(d,offline=false){METRICS.forEach((m,i)=>{const n=cardNodes[i];const v=d.values&&d.values[m.key];
+const ready=!offline&&d.valid===true&&typeof v==='number'&&Number.isFinite(v)&&(!(m.key==='voc'||m.key==='nox')||v>=1);
+const state=ready?classify(m,v):{tone:'',text:offline?'Spojení přerušeno':d.valid?'Čekám na měření':'Data nejsou dostupná'};
+n.card.className='card'+(state.tone?' '+state.tone:'');n.value.textContent=ready?v.toLocaleString('cs-CZ',{minimumFractionDigits:m.digits,maximumFractionDigits:m.digits}):'—';n.assessment.textContent=state.text})}
+function renderStatus(d){const status=document.getElementById('status');status.replaceChildren();
+const mode={WIFI_STA_CONNECTED:'Domácí síť',WIFI_STA_CONNECTING:'Připojování k síti',WIFI_AP_CAPTIVE:'Přístupový bod'};
+for(const [label,text,tone] of [['Wi-Fi',d.wifi==='connected'?'Připojeno':'Odpojeno',d.wifi==='connected'?'ok':'err'],['MQTT',d.mqtt==='connected'?'Připojeno':'Odpojeno',d.mqtt==='connected'?'ok':'err'],['TMEP',String(d.tmepStatus||'Bez hlášení').replace(/^TMEP:/,''),''],['Režim',mode[d.wifiMode]||d.wifiMode||'Neznámý','']]){
+const item=document.createElement('span');item.className='status-item '+tone;item.textContent=label+': '+text;status.appendChild(item)}
+const seconds=Math.max(0,Math.floor(Number(d.uptime)||0));const hours=Math.floor(seconds/3600);const minutes=Math.floor(seconds%3600/60);
+document.getElementById('deviceMeta').textContent='Doba běhu: '+(hours?hours+' h ':'')+minutes+' min '+seconds%60+' s · FW '+d.fw}
+let dataLoading=false;
+async function loadData(){if(otaBusy||dataLoading)return;dataLoading=true;const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),8000);try{const r=await fetch('/api/data',{cache:'no-store',signal:controller.signal});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();if(!d.values||typeof d.valid!=='boolean')throw new Error('Invalid data');renderReadings(d);renderStatus(d);
+document.getElementById('dataState').textContent=d.valid?'Obnova každé 2 s':'Čekám na data senzoru';
+document.getElementById('updated').textContent='Poslední spojení: '+new Date().toLocaleTimeString('cs-CZ');
 document.getElementById('fwVer').textContent=d.fw;
-document.getElementById('status').textContent='WiFi: '+d.wifi+' | režim: '+d.wifiMode+' | TMEP: '+d.tmepStatus+' | MQTT: '+d.mqtt+' | validní data: '+d.valid+' | uptime: '+d.uptime+' s | FW '+d.fw;
 document.getElementById('wifiMode').textContent='Režim: '+d.wifiMode+(d.apSsid?(' | AP: '+d.apSsid+' @ '+d.apIp):'');
 document.getElementById('wifiConn').textContent='Aktuální SSID: '+(d.currentSsid||'-')+' | IP: '+(d.currentIp||'-')+' | RSSI: '+(d.rssi||'-')+' dBm';
-const u=document.getElementById('tmepUrl');u.textContent=d.tmepUrl||'Není dostupné';u.className=d.tmepUrl?'url':'url muted'}catch(e){}}
+const u=document.getElementById('tmepUrl');u.textContent=d.tmepUrl||'Není dostupné';u.className=d.tmepUrl?'url':'url muted'}catch(e){renderReadings({},true);document.getElementById('dataState').textContent='Zařízení není dostupné';const status=document.getElementById('status');status.textContent='Spojení se zařízením selhalo. Zkouším znovu každé 2 s.';document.getElementById('deviceMeta').textContent=''}finally{clearTimeout(timeout);dataLoading=false}}
 async function loadCfg(){const r=await fetch('/api/config');const c=await r.json();const f=document.getElementById('cfgForm');Object.keys(c).forEach(k=>{const el=f[k];if(el&&'value' in el)el.value=c[k]});
 PWD.forEach(([k])=>{f[k].placeholder=c[k+'Set']?'(nastaveno – beze změny)':'(nenastaveno)'})}
 document.querySelectorAll('input[data-for]').forEach(cb=>cb.onchange=()=>{const el=document.getElementById('cfgForm')[cb.dataset.for];el.disabled=cb.checked;if(cb.checked)el.value=''});
@@ -1033,9 +878,9 @@ bool otaInProgress = false;
 void drawOtaScreen(const char* msg) {
   displayOverride = true;
   displayOverrideUntil = millis() + 300000UL;  // dashboard neprekresli hlasku
-  clearCanvas();
-  drawCenteredText("Aktualizace FW", 70, 3);
-  drawCenteredText(msg, 120, 2);
+  const char* lines[] = {msg};
+  dashboard::message(display, "Aktualizace FW", lines, 1, inkColor(),
+                     appConfig.displayInvertRequested ? BLACK : WHITE);
   display.refresh();
 }
 

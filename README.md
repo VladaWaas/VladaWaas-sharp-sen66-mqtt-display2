@@ -30,8 +30,18 @@ A printable enclosure is available on Printables:
 - Real-time dashboard with all measured values
 - Air quality rating with a visual bar based on PM2.5
 - Status bar showing Wi-Fi, TMEP, MQTT and sensor state, plus uptime
+- U8g2 sans-serif fonts rendered at native sizes, with Czech accents and proper unit symbols
+- Temperature, humidity and CO₂ use large 34-pixel digits: three columns in landscape, with CO₂ below temperature/humidity in portrait. PM, VOC and NOx remain visible in the compact lower section.
+- Inverted CO₂ ventilation alert at 2,000 ppm; dashes for gas readings that are not ready
+- Landscape and portrait layouts, with matching typography on startup and OTA screens
 - Remote text and graphics rendering via MQTT
 - Software color inversion (the panel has no hardware inversion)
+
+Fonts are compiled into the firmware; no extra files are needed on the device.
+See [src/fonts/README.md](src/fonts/README.md) for sources, licensing and regeneration.
+After `pio pkg install`, run `python scripts/test_display.py` to render and test
+the dashboard on the host using GCC, Clang or MSVC. Previews are written to
+`.pio/display-tests/`; installing Pillow adds PNG output alongside PBM.
 
 ### Home Assistant integration
 
@@ -50,6 +60,12 @@ A printable enclosure is available on Printables:
 - **Over-the-air firmware updates (OTA)** from the web UI - just upload `firmware.bin` from a GitHub release
 - All settings are stored in NVS
 - Optional upload to **TMEP.cz** via HTTP GET with templated parameters
+
+### Live web dashboard
+
+- Responsive cards with Czech labels, localized numbers and units (°C, %, µg/m³, ppm). VOC and NOₓ are dimensionless indices.
+- Color and text indicators for CO₂, PM2.5, PM10, VOC and NOₓ, with thresholds explained in an expandable legend. These are indicative bands for instantaneous readings, not health limits or an AQI calculation. PM1 and PM4 are shown without a rating.
+- Refreshes every two seconds with connection states and readable uptime. Invalid readings, gas sensor warmup and connection failures show a dash with an explanation.
 
 > The on-device texts (display, web UI, Home Assistant entity names) are in Czech.
 
